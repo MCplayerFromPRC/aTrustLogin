@@ -69,7 +69,7 @@ python main.py --portal_address "https://example.com" --username "your_username"
 
 ```shell
 # 拉取最新版本（国外地址，如果下载缓慢请使用国内地址）
-docker pull kenvix/atrust-autologin:latest
+docker pull kenvix/docker-atrust-autologin:latest
 ```
 
 Docker 镜像如果下载缓慢，可以替换为国内地址。下载后使用 `xz -dc 文件名.tar.xz | docker load` 命令导入镜像。
@@ -86,14 +86,14 @@ docker tag kenvix/docker-atrust-autologin:amd64 kenvix/docker-atrust-autologin:l
 阅读“程序运行参数说明” ，然后请将程序参数填入 `ATRUST_OPTS` 环境变量中，然后运行 Docker 容器即可。
 
 ```shell
-docker run -it --rm -e ATRUST_OPTS='--portal_address="门户地址" --username=用户名 --password=密码 --totp_key=TOTP密钥 --cookie_tid "your_cookie_tid" --cookie_sig "your_cookie_sig" --device /dev/net/tun --cap-add NET_ADMIN -ti -e PASSWORD=xxxx -e URLWIN=1 -v $HOME/.atrust-data:/root -p 127.0.0.1:5901:5901 -p 127.0.0.1:8888:8888 --sysctl net.ipv4.conf.default.route_localnet=1 --shm-size 256m  kenvix/atrust-autologin:latest
+docker run -it --rm -e ATRUST_OPTS='--portal_address="门户地址" --username=用户名 --password=密码 --totp_key=TOTP密钥 --cookie_tid "your_cookie_tid" --cookie_sig "your_cookie_sig"' --device /dev/net/tun --cap-add NET_ADMIN -ti -e PASSWORD=xxxx -e URLWIN=1 -v $HOME/.atrust-data:/root -p 127.0.0.1:5901:5901 -p 127.0.0.1:8888:8888 --sysctl net.ipv4.conf.default.route_localnet=1 --shm-size 256m  kenvix/docker-atrust-autologin:latest
 ```
 
 cookie_sig 和 cookie_tid 可以不必设置，如果不设置，首次登录会遇到验证码，但是可以通过 VNC 远程连接服务器（VNC 端口 5901 ），手动输入验证码，然后程序会自动保存 cookie，之后就不会再遇到验证码了。
 
 注意：**此命令默认创建的是临时容器**！容器停止或系统重启后就会删除！如果需要保存数据并且开机自动启动，请将 `--rm` 替换为 `--restart unless-stopped`。
 
-默认带有每隔 `200` 秒的刷新登录保活机制，如果不需要此功能，可以在 `ATRUST_OPTS` 中添加 `--keepalive 0` 参数。也可以通过 `--keepalive` 参数设置保活时间，单位为秒。即 `docker run -it -e ATRUST_OPTS='--keepalive 0 ...其他参数' ...其他参数 kenvix/atrust-autologin:latest`
+默认带有每隔 `200` 秒的刷新登录保活机制，如果不需要此功能，可以在 `ATRUST_OPTS` 中添加 `--keepalive 0` 参数。也可以通过 `--keepalive` 参数设置保活时间，单位为秒。即 `docker run -it -e ATRUST_OPTS='--keepalive 0 ...其他参数' ...其他参数 kenvix/docker-atrust-autologin:latest`
 
 如果还需要发包保活功能，请添加 Docker `PING_ADDR` 和 `PING_INTERVAL` 环境变量，具体[参见此处](https://github.com/docker-easyconnect/docker-easyconnect/blob/master/doc/usage.md)。指定的服务器地址必须是 VPN 可到达的，例如 `docker run -it -e PING_ADDR=172.20.0.1 -e PING_INTERVAL=200 ...其他参数`。
 
