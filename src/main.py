@@ -1,3 +1,6 @@
+"""
+python main.py --portal_address "https://vpn.sii.edu.cn" --username "XXX" --password "XXX" --cookie_sid "your_cookie_sid" --cookie_sig "your_cookie_sig" --keepalive 15 --interactive True --wait_atrust True
+"""
 import os.path
 import pickle
 import platform
@@ -20,7 +23,7 @@ class ATrustLoginStorage(BaseModel):
     local_storage: Dict[str, Any]
 
 class ATrustLogin:
-    def __init__(self, portal_address, driver_path=None, browser_path=None, driver_type=None, data_dir="data", cookie_tid=None, cookie_sig=None, interactive=False):
+    def __init__(self, portal_address, driver_path=None, browser_path=None, driver_type=None, data_dir="data", cookie_sid=None, cookie_sig=None, interactive=False):
         self.initialized = False
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
@@ -28,7 +31,7 @@ class ATrustLogin:
         self.interactive = interactive
         self.portal_address = portal_address
         self.portal_host = urlparse(portal_address).hostname
-        self.cookie_tid = cookie_tid
+        self.cookie_sid = cookie_sid
         self.cookie_sig = cookie_sig
 
         self.must_be_logged_keywords = ['app_center', 'user_info', 'app_apply', 'device_manage']
@@ -77,7 +80,7 @@ class ATrustLogin:
         else :
             self.driver = webdriver.Chrome(service=service, options=self.options)
 
-        self.wait = WebDriverWait(self.driver, 10)
+        self.wait = WebDriverWait(self.driver, 100)
 
     # 打开默认的portal地址并等待sangfor_main_auth_container出现
     def open_portal(self):
@@ -87,13 +90,15 @@ class ATrustLogin:
             self.driver.delete_cookie("language")
         if self.driver.get_cookie("lang"):
             self.driver.delete_cookie("lang")
+        if self.driver.get_cookie("online"):
+            self.driver.delete_cookie("online")
 
         self.driver.add_cookie(
             {
                 "name": "language",
                 "value": "zh-CN",
-                "domain": self.portal_host,
-                "path": "/",
+                "Domain": self.portal_host,
+                "Path": "/",
             }
         )
 
@@ -101,15 +106,24 @@ class ATrustLogin:
             {
                 "name": "lang",
                 "value": "zh-cn",
-                "domain": self.portal_host,
-                "path": "/",
+                "Domain": self.portal_host,
+                "Path": "/",
+            }
+        )
+
+        self.driver.add_cookie(
+            {
+                "name": "online",
+                "value": "1",
+                "Domain": self.portal_host,
+                "Path": "/",
             }
         )
 
     def wait_login_page(self):
         # 使用显式等待sangfor_main_auth_container元素出现
-        self.wait.until(EC.presence_of_element_located((By.ID, "sangfor_main_auth_container")))
-        self.wait.until(EC.presence_of_element_located((By.CLASS_NAME, "login-panel")))
+        self.wait.until(EC.presence_of_element_located((By.CLASS_NAME, "nav-content")))
+        self.wait.until(EC.presence_of_element_located((By.CLASS_NAME, "login")))
         self.wait.until(lambda d: d.execute_script("return document.readyState") == "complete")
 
     @staticmethod
@@ -130,7 +144,7 @@ class ATrustLogin:
             placeholder = element.get_attribute("placeholder")
             input_type = element.get_attribute("type")
             # 确保input具有指定的placeholder，并且不是hidden类型
-            if placeholder and ("账号" in placeholder or "account" in placeholder.lower() or "密码" in placeholder or "password" in placeholder.lower()) and input_type != "hidden":
+            if placeholder and ("学工号" in placeholder or "账号" in placeholder or "account" in placeholder.lower() or "密码" in placeholder or "password" in placeholder.lower()) and input_type != "hidden":
                 inputs_found.append(element)
                 # 如果找到两个符合条件的input框就返回
                 if len(inputs_found) == 2:
@@ -147,7 +161,7 @@ class ATrustLogin:
     # 输入用户名和密码
     def enter_credentials(self, username, password):
         try:
-            element = self.driver.find_element(By.XPATH, "//div[contains(@class, 'server-name') and contains(text(), '本地密码')]")
+            element = self.driver.find_element(By.XPATH, "//div[contains(@class, 'nav-content')]")
             if element.is_displayed():
                 self.delay_input()
                 self.scroll_and_click(element)
@@ -155,7 +169,7 @@ class ATrustLogin:
             pass
 
         # 找到包含ID=sangfor_main_auth_container的div
-        main_auth_div = self.driver.find_element(By.ID, "sangfor_main_auth_container")
+        main_auth_div = self.driver.find_element(By.CLASS_NAME, "tabcontent0")
 
         # 递归查找前两个input框
         input_fields = self.find_input_fields(main_auth_div)
@@ -175,7 +189,7 @@ class ATrustLogin:
             password_input.clear()
             password_input.send_keys(password)
 
-            checkbox = main_auth_div.find_element(By.XPATH, "//input[@type='checkbox']")
+            checkbox = main_auth_div.find_element(By.XPATH, "//input[@type='submit']")
             # 检查checkbox是否已经被选中
             if not checkbox.is_selected():
                 self.delay_input()
@@ -188,12 +202,12 @@ class ATrustLogin:
     # 查找并点击登录按钮
     def click_login_button(self):
         # 在div class=login-panel中寻找包含“登录”或“login”或“log in”的按钮
-        login_panel = self.driver.find_element(By.CLASS_NAME, "login-panel")
-        buttons = login_panel.find_elements(By.TAG_NAME, "button")
+        login_panel = self.driver.find_element(By.CLASS_NAME, "login")
+        buttons = login_panel.find_elements(By.CLASS_NAME, "auth_login_btn")
 
         for button in buttons:
             button_text = button.text.lower()
-            if "登录" in button_text or "login" in button_text or "log in" in button_text:
+            if "登 录" in button_text or "登录" in button_text or "login" in button_text or "log in" in button_text:
                 self.scroll_and_click(button)
                 return
         logger.info("未找到符合条件的登录按钮")
@@ -215,7 +229,7 @@ class ATrustLogin:
         except FileNotFoundError:
             logger.info("未找到存储的数据")
 
-        self.set_cli_cookie(force=False)
+        # self.set_cli_cookie(force=False)
 
     def scroll_to(self, element):
         self.driver.execute_script("arguments[0].scrollIntoView();", element)
@@ -226,19 +240,19 @@ class ATrustLogin:
         return element
 
     def set_cli_cookie(self, force=False):
-        if force or not self.driver.get_cookie("tid"):
-            self.driver.delete_cookie("tid")
+        if force or not self.driver.get_cookie("sid"):
+            self.driver.delete_cookie("sid")
             self.driver.add_cookie({
-                "name": "tid",
-                "value": self.cookie_tid,
+                "name": "sid",
+                "value": self.cookie_sid,
                 "domain": self.portal_host,
                 "path": "/"
             })
 
-        if force or not self.driver.get_cookie("tid.sig"):
-            self.driver.delete_cookie("tid.sig")
+        if force or not self.driver.get_cookie("sid.sig"):
+            self.driver.delete_cookie("sid.sig")
             self.driver.add_cookie({
-                "name": "tid.sig",
+                "name": "sid.sig",
                 "value": self.cookie_sig,
                 "domain": self.portal_host,
                 "path": "/"
@@ -329,7 +343,7 @@ class ATrustLogin:
         if any(keyword in url.fragment for keyword in self.must_not_logged_keywords):
             return False
 
-        return "工作台" in self.driver.page_source and "本地密码" not in self.driver.page_source
+        return "工作台" in self.driver.page_source and "密码登录" not in self.driver.page_source
 
     def close(self):
         self.driver.quit()
@@ -364,14 +378,14 @@ class ATrustLogin:
                     logger.info(f"aTrust Port {port} is not yet being listened on. Waiting for aTrust start ...")
                     ATrustLogin.delay_loading()
 
-def main(portal_address, username, password, totp_key=None, cookie_tid=None, cookie_sig=None, keepalive=200, data_dir="./data", driver_type=None, driver_path=None, browser_path=None, interactive=False, wait_atrust=True):
+def main(portal_address, username, password, totp_key=None, cookie_sid=None, cookie_sig=None, keepalive=200, data_dir="./data", driver_type=None, driver_path=None, browser_path=None, interactive=False, wait_atrust=True):
     logger.info("Opening Web Browser")
 
     if wait_atrust:
         ATrustLogin.wait_for_port(54631)
 
     # 创建ATrustLogin对象
-    at = ATrustLogin(data_dir=data_dir, portal_address=portal_address, cookie_tid=cookie_tid, cookie_sig=cookie_sig, driver_type=driver_type, driver_path=driver_path, browser_path=browser_path, interactive=interactive)
+    at = ATrustLogin(data_dir=data_dir, portal_address=portal_address, cookie_sid=cookie_sid, cookie_sig=cookie_sig, driver_type=driver_type, driver_path=driver_path, browser_path=browser_path, interactive=interactive)
 
     at.init()
 
