@@ -1,7 +1,8 @@
 """
 python main.py --portal_address "https://vpn.sii.edu.cn" --username "XXX" --password "XXX" --cookie_sid "your_cookie_sid" --cookie_sig "your_cookie_sig" --keepalive 15 --interactive True --wait_atrust True
 """
-import os.path
+import argparse
+import os
 import pickle
 import platform
 import socket
@@ -21,6 +22,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 class ATrustLoginStorage(BaseModel):
     cookies: List[Dict[str, Any]]
     local_storage: Dict[str, Any]
+
 
 class ATrustLogin:
     def __init__(self, portal_address, driver_path=None, browser_path=None, driver_type=None, data_dir="data", cookie_sid=None, cookie_sig=None, interactive=False):
@@ -49,7 +51,7 @@ class ATrustLogin:
         if driver_type == "edge":
             from selenium.webdriver.edge.options import Options
             from selenium.webdriver.edge.service import Service
-        else :
+        else:
             from selenium.webdriver.chrome.service import Service
             from selenium.webdriver.chrome.options import Options
 
@@ -77,7 +79,7 @@ class ATrustLogin:
 
         if driver_type == "edge":
             self.driver = webdriver.Edge(service=service, options=self.options)
-        else :
+        else:
             self.driver = webdriver.Chrome(service=service, options=self.options)
 
         self.wait = WebDriverWait(self.driver, 100)
@@ -378,14 +380,32 @@ class ATrustLogin:
                     logger.info(f"aTrust Port {port} is not yet being listened on. Waiting for aTrust start ...")
                     ATrustLogin.delay_loading()
 
-def main(portal_address, username, password, totp_key=None, cookie_sid=None, cookie_sig=None, keepalive=200, data_dir="./data", driver_type=None, driver_path=None, browser_path=None, interactive=False, wait_atrust=True):
-    logger.info("Opening Web Browser")
 
-    if wait_atrust:
+def main():
+    logger.info("Opening Web Browser")
+    
+    parser = argparse.ArgumentParser(description="aTrust Login Script")
+    parser.add_argument('--portal_address', type=str, required=True, help='Portal Address (e.g., https://vpn.sii.edu.cn)')
+    parser.add_argument('--username', type=str, required=True, help='Username')
+    parser.add_argument('--password', type=str, required=True, help='Password')
+    parser.add_argument('--totp_key', type=str, help='TOTP Key for 2FA')
+    parser.add_argument('--cookie_sid', type=str, help='Cookie SID')
+    parser.add_argument('--cookie_sig', type=str, help='Cookie SIG')
+    parser.add_argument('--keepalive', type=int, default=200, help='Keepalive interval in seconds')
+    parser.add_argument('--data_dir', type=str, default='./data', help='Data directory')
+    parser.add_argument('--driver_type', type=str, choices=['chrome', 'edge'], default=None, help='Driver type (chrome or edge)')
+    parser.add_argument('--driver_path', type=str, help='Path to the driver executable')
+    parser.add_argument('--browser_path', type=str, help='Path to the browser executable')
+    parser.add_argument('--interactive', action='store_true', help='Enable interactive mode')
+    parser.add_argument('--wait_atrust', action='store_true', help='Wait for aTrust to start before proceeding')
+
+    args = parser.parse_args()
+
+    if args.wait_atrust:
         ATrustLogin.wait_for_port(54631)
 
     # 创建ATrustLogin对象
-    at = ATrustLogin(data_dir=data_dir, portal_address=portal_address, cookie_sid=cookie_sid, cookie_sig=cookie_sig, driver_type=driver_type, driver_path=driver_path, browser_path=browser_path, interactive=interactive)
+    at = ATrustLogin(data_dir=args.data_dir, portal_address=args.portal_address, cookie_sid=args.cookie_sid, cookie_sig=args.cookie_sig, driver_type=args.driver_type, driver_path=args.driver_path, browser_path=args.browser_path, interactive=args.interactive)
 
     at.init()
 
@@ -395,15 +415,15 @@ def main(portal_address, username, password, totp_key=None, cookie_sid=None, coo
                 logger.info("Session lost. Trying to login again ...")
                 at.open_portal()
                 at.delay_loading()
-                if at.login(username=username, password=password, totp_key=totp_key) is True:
+                if at.login(username=args.username, password=args.password, totp_key=args.totp_key) is True:
                     at.delay_loading()
                     at.delay_loading()
 
-            if keepalive <= 0:
+            if args.keepalive <= 0:
                 at.close()
                 exit(0)
             else:
-                time.sleep(keepalive)
+                time.sleep(args.keepalive)
                 at.open_portal()
                 at.delay_loading()
         except Exception as e:
@@ -411,6 +431,6 @@ def main(portal_address, username, password, totp_key=None, cookie_sid=None, coo
             logger.exception(e)
             at.delay_loading()
 
+
 if __name__ == "__main__":
-    from fire import Fire
-    Fire(main)
+    main()
